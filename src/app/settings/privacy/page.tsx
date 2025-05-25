@@ -263,7 +263,7 @@ export default function DataPrivacyPage() {
                 <h3 className="font-medium text-amber-900 mb-1">Before you delete your account:</h3>
                 <ul className="text-sm text-amber-800 space-y-1">
                   <li>• Download your health data using the export feature above</li>
-                  <li>• You'll have 7 days to cancel the deletion if you change your mind</li>
+                  <li>• You&apos;ll have 7 days to cancel the deletion if you change your mind</li>
                   <li>• After 7 days, all your data will be permanently removed</li>
                   <li>• This action cannot be undone once the grace period expires</li>
                 </ul>
@@ -311,7 +311,7 @@ export default function DataPrivacyPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Type "DELETE" to confirm:
+                  Type &quot;DELETE&quot; to confirm:
                 </label>
                 <input
                   type="text"

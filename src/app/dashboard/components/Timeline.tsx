@@ -92,7 +92,7 @@ export default function Timeline({ metrics, isLoading }: TimelineProps) {
           This could mean:<br/>
           • No recorded activity in the last 7 days<br/>
           • Google Fit permissions need adjustment<br/>
-          • Your device isn't tracking fitness data
+          • Your device isn&apos;t tracking fitness data
         </p>
         <p className="text-xs text-gray-400 mt-2">
           Check your Google Fit app to ensure data is being recorded

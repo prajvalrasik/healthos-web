@@ -85,6 +85,7 @@ async function fetchFitData(accessToken: string, startDate: string, endDate: str
 }
 
 // Helper function to parse and store fit data
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function parseFitData(fitData: GoogleFitResponse, userId: string, supabase: any) {
   const dailyMetrics: DailyMetrics[] = []
 
@@ -162,14 +163,15 @@ async function parseFitData(fitData: GoogleFitResponse, userId: string, supabase
     }
   }
 
-  // Upsert metrics into database
-  if (dailyMetrics.length > 0) {
-    const { error } = await supabase
-      .from('fit_daily_metrics')
-      .upsert(dailyMetrics as any, { 
-        onConflict: 'user_id,date',
-        ignoreDuplicates: false 
-      })
+      // Upsert metrics into database
+    if (dailyMetrics.length > 0) {
+      const { error } = await supabase
+        .from('fit_daily_metrics')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .upsert(dailyMetrics as any, { 
+          onConflict: 'user_id,date',
+          ignoreDuplicates: false 
+        })
 
     if (error) {
       throw new Error(`Database error: ${error.message}`)

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { User, Mail, Calendar, Shield } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -175,7 +175,7 @@ export default function ProfilePage() {
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">More Profile Features Coming Soon</h3>
             <p className="text-sm text-gray-600 mb-4">
-              We're working on additional profile customization options including:
+              We&apos;re working on additional profile customization options including:
             </p>
             <ul className="text-sm text-gray-600 space-y-1 max-w-md mx-auto">
               <li>• Profile picture upload</li>

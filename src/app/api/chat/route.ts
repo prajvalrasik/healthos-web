@@ -6,15 +6,23 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: string
-}
-
 interface HealthContext {
-  recentMetrics?: any[]
-  labMarkers?: any[]
+  recentMetrics?: Array<{
+    user_id: string
+    date: string
+    steps: number
+    distance_meters: number
+    calories_burned: number
+    active_minutes: number
+  }>
+  labMarkers?: Array<{
+    id: string
+    user_id: string
+    marker_name: string
+    value: number
+    unit: string
+    created_at: string
+  }>
   trends?: string
 }
 
@@ -86,7 +94,10 @@ async function fetchHealthContext(userId: string): Promise<HealthContext> {
   }
 }
 
-function calculateTrends(metrics: any[]): string {
+function calculateTrends(metrics: Array<{
+  steps: number
+  calories_burned: number
+}>): string {
   if (metrics.length < 2) return 'Insufficient data for trends'
 
   const recent = metrics[0]

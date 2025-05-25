@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       echo: `Test response for: ${body.message || 'No message provided'}`,
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Invalid JSON' },
       { status: 400 }

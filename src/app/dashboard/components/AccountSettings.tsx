@@ -101,7 +101,7 @@ export default function AccountSettings({ user }: AccountSettingsProps) {
           ) : (
             <div className="space-y-3">
               <p className="text-sm font-medium text-red-900">
-                Type "DELETE" to confirm account deletion:
+                Type &quot;DELETE&quot; to confirm account deletion:
               </p>
               <input
                 type="text"
