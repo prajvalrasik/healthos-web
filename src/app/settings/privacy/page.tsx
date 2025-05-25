@@ -161,7 +161,7 @@ export default function DataPrivacyPage() {
         </CardHeader>
         <CardContent className="p-6 pt-0 space-y-4">
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <h3 className="font-medium text-blue-900 mb-2">What's included in your export:</h3>
+            <h3 className="font-medium text-blue-900 mb-2">What&apos;s included in your export:</h3>
             <ul className="text-sm text-blue-800 space-y-1">
               <li>• Profile information and account details</li>
               <li>• Fitness metrics (steps, calories, active minutes)</li>
