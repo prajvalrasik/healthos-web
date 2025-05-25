@@ -1,0 +1,2 @@
+# Ignore all files in this directory - these are Deno edge functions
+**/* 
