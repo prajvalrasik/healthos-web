@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url)
     const code = url.searchParams.get('code')
     const error = url.searchParams.get('error')
+    const state = url.searchParams.get('state') // This should contain user ID
 
     // Handle OAuth error (user denied permission)
     if (error) {
@@ -19,18 +20,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/dashboard?error=no_code', request.url))
     }
 
-    // Get server-side Supabase client with cookies
-    const supabase = await createServerSupabaseClient()
-    
-    // Get current user from session/cookies
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      console.error('User not authenticated:', authError)
-      return NextResponse.redirect(new URL('/?error=not_authenticated', request.url))
+    if (!state) {
+      console.error('No state parameter received - cannot identify user')
+      return NextResponse.redirect(new URL('/dashboard?error=invalid_state', request.url))
     }
 
+    // Create server-side Supabase client for database operations
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    // Use the state parameter as user ID (this should be set when initiating OAuth)
+    const userId = state
+
     // Exchange code for tokens with Google
+    const redirectUri = `${url.origin}/api/google-fit/exchange`
+    
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
@@ -41,7 +47,7 @@ export async function GET(request: NextRequest) {
         client_secret: process.env.GOOGLE_CLIENT_SECRET!,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
+        redirect_uri: redirectUri,
       }),
     })
 
@@ -56,8 +62,7 @@ export async function GET(request: NextRequest) {
     const { error: updateError } = await supabase
       .from('profiles')
       .upsert({
-        id: user.id,
-        email: user.email,
+        id: userId,
         google_refresh_token: tokenData.refresh_token,
         updated_at: new Date().toISOString(),
       })
@@ -67,7 +72,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/dashboard?error=database_error', request.url))
     }
 
-    console.log('Google Fit connected successfully for user:', user.email)
+    console.log('Google Fit connected successfully for user:', userId)
     
     // Redirect back to dashboard with success
     return NextResponse.redirect(new URL('/dashboard?connected=true', request.url))
