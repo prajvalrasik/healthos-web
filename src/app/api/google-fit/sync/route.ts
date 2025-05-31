@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 // Types for Google Fit API responses
 interface GoogleFitBucket {
@@ -89,8 +89,7 @@ async function fetchFitData(accessToken: string, startDate: string, endDate: str
 }
 
 // Helper function to parse and store fit data
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function parseFitData(fitData: GoogleFitResponse, userId: string, supabase: any) {
+async function parseFitData(fitData: GoogleFitResponse, userId: string, supabase: SupabaseClient) {
   const dailyMetrics: DailyMetrics[] = []
 
   console.log('🔍 Processing', fitData.bucket?.length || 0, 'daily buckets')
@@ -171,8 +170,7 @@ async function parseFitData(fitData: GoogleFitResponse, userId: string, supabase
     if (dailyMetrics.length > 0) {
       const { error } = await supabase
         .from('fit_daily_metrics')
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .upsert(dailyMetrics as any, { 
+        .upsert(dailyMetrics, { 
           onConflict: 'user_id,date',
           ignoreDuplicates: false 
         })
@@ -187,7 +185,7 @@ async function parseFitData(fitData: GoogleFitResponse, userId: string, supabase
 
 export async function POST(request: Request) {
   let userId: string | undefined
-  let supabase: any
+  let supabase: SupabaseClient | undefined
   
   try {
     // Get user ID from request body

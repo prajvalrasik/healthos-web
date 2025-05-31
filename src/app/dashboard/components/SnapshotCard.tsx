@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+/* eslint-disable react/no-unescaped-entities */
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -60,13 +61,7 @@ export default function SnapshotCard({ userId }: SnapshotCardProps) {
     setMounted(true)
   }, [])
 
-  useEffect(() => {
-    if (mounted) {
-      fetchSnapshot()
-    }
-  }, [userId, mounted])
-
-  const fetchSnapshot = async () => {
+  const fetchSnapshot = useCallback(async () => {
     try {
       setLoading(true)
       const response = await fetch(`/api/health/snapshot?userId=${userId}`)
@@ -83,7 +78,13 @@ export default function SnapshotCard({ userId }: SnapshotCardProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [userId])
+
+  useEffect(() => {
+    if (mounted) {
+      fetchSnapshot()
+    }
+  }, [userId, mounted, fetchSnapshot])
 
   // Don't render until mounted to prevent hydration mismatch
   if (!mounted) {

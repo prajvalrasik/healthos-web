@@ -8,30 +8,36 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+interface FitnessHistoryItem {
+  date: string
+  steps: number
+  calories: number
+  activeMinutes: number
+  distance: number
+}
+
+interface LabHistoryItem {
+  date: string
+  value: number
+  status: string
+}
+
+interface LabTrendItem {
+  markerName: string
+  category: string
+  unit: string
+  history: LabHistoryItem[]
+  trend: 'improving' | 'stable' | 'declining' | 'unknown'
+  prediction?: {
+    nextValue: number
+    confidence: number
+    recommendation: string
+  }
+}
+
 interface TrendData {
-  fitnessHistory: Array<{
-    date: string
-    steps: number
-    calories: number
-    activeMinutes: number
-    distance: number
-  }>
-  labTrends: Array<{
-    markerName: string
-    category: string
-    unit: string
-    history: Array<{
-      date: string
-      value: number
-      status: string
-    }>
-    trend: 'improving' | 'stable' | 'declining' | 'unknown'
-    prediction?: {
-      nextValue: number
-      confidence: number
-      recommendation: string
-    }
-  }>
+  fitnessHistory: Array<FitnessHistoryItem>
+  labTrends: Array<LabTrendItem>
   insights: {
     fitnessInsights: string[]
     labInsights: string[]
@@ -104,7 +110,7 @@ async function generateTrendAnalysis(userId: string, days: number): Promise<Tren
   }))
 
   // Process lab trends by marker
-  const labTrendsMap = new Map<string, any>()
+  const labTrendsMap = new Map<string, LabTrendItem>()
   
   ;(labData || []).forEach(marker => {
     const key = marker.marker_name
@@ -127,7 +133,7 @@ async function generateTrendAnalysis(userId: string, days: number): Promise<Tren
 
   // Calculate trends and predictions for each marker
   const labTrends = Array.from(labTrendsMap.values()).map(markerData => {
-    const history = markerData.history.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    const history = markerData.history.sort((a: LabHistoryItem, b: LabHistoryItem) => new Date(a.date).getTime() - new Date(b.date).getTime())
     
     if (history.length < 2) {
       return { ...markerData, trend: 'unknown' as const }
@@ -137,8 +143,8 @@ async function generateTrendAnalysis(userId: string, days: number): Promise<Tren
     const firstHalf = history.slice(0, Math.floor(history.length / 2))
     const secondHalf = history.slice(Math.floor(history.length / 2))
     
-    const firstAvg = firstHalf.reduce((sum: number, h: any) => sum + h.value, 0) / firstHalf.length
-    const secondAvg = secondHalf.reduce((sum: number, h: any) => sum + h.value, 0) / secondHalf.length
+    const firstAvg = firstHalf.reduce((sum: number, h: LabHistoryItem) => sum + h.value, 0) / firstHalf.length
+    const secondAvg = secondHalf.reduce((sum: number, h: LabHistoryItem) => sum + h.value, 0) / secondHalf.length
     
     const changePercent = ((secondAvg - firstAvg) / firstAvg) * 100
     
@@ -156,7 +162,6 @@ async function generateTrendAnalysis(userId: string, days: number): Promise<Tren
     }
 
     // Simple prediction (linear extrapolation)
-    const lastValue = history[history.length - 1].value
     const prediction = history.length >= 3 ? {
       nextValue: Math.round((secondAvg + (secondAvg - firstAvg)) * 100) / 100,
       confidence: Math.max(0.3, Math.min(0.9, 1 - Math.abs(changePercent) / 100)),
@@ -203,8 +208,8 @@ function generateRecommendation(markerName: string, trend: string, changePercent
 }
 
 function generateHealthInsights(
-  fitnessHistory: any[],
-  labTrends: any[]
+  fitnessHistory: FitnessHistoryItem[],
+  labTrends: LabTrendItem[]
 ): {
   fitnessInsights: string[]
   labInsights: string[]
