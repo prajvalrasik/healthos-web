@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { chatWithFallback } from '@/lib/llm'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,6 +25,11 @@ interface HealthContext {
     created_at: string
   }>
   trends?: string
+  recentChats?: Array<{
+    user_message: string
+    ai_response: string
+    created_at: string
+  }>
 }
 
 export async function POST(request: NextRequest) {
@@ -62,31 +68,40 @@ export async function POST(request: NextRequest) {
 
 async function fetchHealthContext(userId: string): Promise<HealthContext> {
   try {
-    // Fetch recent fitness metrics
+    // Fetch recent fitness metrics (last 14 days for better trend analysis)
     const { data: metrics } = await supabase
       .from('fit_daily_metrics')
       .select('*')
       .eq('user_id', userId)
       .is('deleted_at', null)
       .order('date', { ascending: false })
-      .limit(7)
+      .limit(14)
 
-    // Fetch recent lab markers
+    // Fetch recent lab markers (last 20 markers for comprehensive view)
     const { data: labMarkers } = await supabase
       .from('lab_markers')
-      .select('*')
+      .select('id, user_id, marker_name, value, unit, created_at')
       .eq('user_id', userId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
-      .limit(10)
+      .limit(20)
 
-    // Calculate trends
-    const trends = calculateTrends(metrics || [])
+    // Fetch recent chat conversations for context continuity
+    const { data: recentChats } = await supabase
+      .from('chat_conversations')
+      .select('user_message, ai_response, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    // Calculate comprehensive trends
+    const trends = calculateComprehensiveTrends(metrics || [])
 
     return {
       recentMetrics: metrics || [],
       labMarkers: labMarkers || [],
-      trends
+      trends,
+      recentChats: recentChats || []
     }
   } catch (error) {
     console.error('Error fetching health context:', error)
@@ -94,75 +109,80 @@ async function fetchHealthContext(userId: string): Promise<HealthContext> {
   }
 }
 
-function calculateTrends(metrics: Array<{
+function calculateComprehensiveTrends(metrics: Array<{
+  date: string
   steps: number
   calories_burned: number
+  active_minutes: number
+  distance_meters: number
 }>): string {
-  if (metrics.length < 2) return 'Insufficient data for trends'
+  if (metrics.length < 3) return 'Insufficient data for trend analysis'
 
-  const recent = metrics[0]
-  const previous = metrics[1]
+  // Sort by date to ensure proper chronological order
+  const sortedMetrics = metrics.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  
+  if (sortedMetrics.length < 3) return 'Need more data for trends'
 
-  const stepsTrend = recent.steps > previous.steps ? 'increasing' : 'decreasing'
-  const caloriesTrend = recent.calories_burned > previous.calories_burned ? 'increasing' : 'decreasing'
+  // Calculate 7-day trends vs previous 7 days
+  const recent7Days = sortedMetrics.slice(-7)
+  const previous7Days = sortedMetrics.slice(-14, -7)
 
-  return `Steps are ${stepsTrend}, calories are ${caloriesTrend}`
+  if (recent7Days.length === 0) return 'No recent data available'
+
+  const recentAvg = {
+    steps: Math.round(recent7Days.reduce((sum, m) => sum + m.steps, 0) / recent7Days.length),
+    calories: Math.round(recent7Days.reduce((sum, m) => sum + m.calories_burned, 0) / recent7Days.length),
+    activeMinutes: Math.round(recent7Days.reduce((sum, m) => sum + m.active_minutes, 0) / recent7Days.length),
+    distance: Math.round(recent7Days.reduce((sum, m) => sum + m.distance_meters, 0) / recent7Days.length / 1000 * 10) / 10
+  }
+
+  if (previous7Days.length === 0) {
+    return `Recent 7-day averages: ${recentAvg.steps.toLocaleString()} steps, ${recentAvg.calories} calories, ${recentAvg.activeMinutes} active minutes, ${recentAvg.distance}km distance`
+  }
+
+  const previousAvg = {
+    steps: Math.round(previous7Days.reduce((sum, m) => sum + m.steps, 0) / previous7Days.length),
+    calories: Math.round(previous7Days.reduce((sum, m) => sum + m.calories_burned, 0) / previous7Days.length),
+    activeMinutes: Math.round(previous7Days.reduce((sum, m) => sum + m.active_minutes, 0) / previous7Days.length)
+  }
+
+  // Calculate percentage changes
+  const stepChange = ((recentAvg.steps - previousAvg.steps) / previousAvg.steps * 100)
+  const calorieChange = ((recentAvg.calories - previousAvg.calories) / previousAvg.calories * 100)
+  const activeChange = ((recentAvg.activeMinutes - previousAvg.activeMinutes) / previousAvg.activeMinutes * 100)
+
+  const trends = []
+  
+  if (Math.abs(stepChange) > 5) {
+    trends.push(`Steps ${stepChange > 0 ? 'increased' : 'decreased'} by ${Math.abs(stepChange).toFixed(1)}%`)
+  } else {
+    trends.push(`Steps remain stable around ${recentAvg.steps.toLocaleString()}`)
+  }
+
+  if (Math.abs(calorieChange) > 5) {
+    trends.push(`calories ${calorieChange > 0 ? 'up' : 'down'} ${Math.abs(calorieChange).toFixed(1)}%`)
+  } else {
+    trends.push(`calories stable at ${recentAvg.calories}`)
+  }
+
+  if (Math.abs(activeChange) > 10) {
+    trends.push(`active time ${activeChange > 0 ? 'increased' : 'decreased'} by ${Math.abs(activeChange).toFixed(1)}%`)
+  }
+
+  return trends.join(', ')
 }
 
 async function generateHealthResponse(message: string, context: HealthContext): Promise<string> {
-  // For now, we'll create a rule-based response system
-  // In production, this would integrate with OpenAI/Claude API
-  
-  const lowerMessage = message.toLowerCase()
-  
-  // Health insights based on context
-  if (lowerMessage.includes('steps') || lowerMessage.includes('walking')) {
-    const recentSteps = context.recentMetrics?.[0]?.steps || 0
-    if (recentSteps > 8000) {
-      return `Great job! You've been walking ${recentSteps.toLocaleString()} steps recently. You're exceeding the recommended 8,000 steps per day. Keep up the excellent work! 🚶‍♂️✨`
-    } else if (recentSteps > 5000) {
-      return `You're doing well with ${recentSteps.toLocaleString()} steps recently. Try to aim for 8,000+ steps daily for optimal health benefits. Maybe take a walk after meals? 🌟`
-    } else {
-      return `I see you've walked ${recentSteps.toLocaleString()} steps recently. Consider gradually increasing your daily walks. Even a 10-minute walk can boost your energy and mood! 💪`
-    }
+  try {
+    // Use the new AI-powered chat with Gemini and rule-based fallback
+    const response = await chatWithFallback(message, context)
+    return response
+  } catch (error) {
+    console.error('Error in generateHealthResponse:', error)
+    
+    // Final fallback to a simple response
+    return `I'm having trouble processing your request right now. Please try again in a moment. In the meantime, you can explore your health data in the dashboard or ask me about your steps, calories, or lab results! 🤖`
   }
-
-  if (lowerMessage.includes('calories') || lowerMessage.includes('burn')) {
-    const recentCalories = context.recentMetrics?.[0]?.calories_burned || 0
-    return `You've burned ${recentCalories} calories in your recent activity. ${context.trends}. Remember, consistency is key for maintaining a healthy metabolism! 🔥`
-  }
-
-  if (lowerMessage.includes('lab') || lowerMessage.includes('results') || lowerMessage.includes('markers')) {
-    const markerCount = context.labMarkers?.length || 0
-    if (markerCount > 0) {
-      const recentMarker = context.labMarkers?.[0]
-      return `I can see you have ${markerCount} lab markers tracked. Your most recent marker shows ${recentMarker?.marker_name}: ${recentMarker?.value} ${recentMarker?.unit}. Always discuss lab results with your healthcare provider for proper interpretation. 📊`
-    } else {
-      return `I don't see any lab results uploaded yet. You can upload your lab reports in the dashboard for personalized insights about your biomarkers. 🧪`
-    }
-  }
-
-  if (lowerMessage.includes('trend') || lowerMessage.includes('progress')) {
-    return `Based on your recent data: ${context.trends}. Your health journey is unique - small consistent improvements lead to big results over time! 📈`
-  }
-
-  if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || lowerMessage.includes('hey')) {
-    return `Hello! I'm your HealthOS assistant. I can help you understand your fitness data, lab results, and health trends. What would you like to know about your health today? 👋`
-  }
-
-  if (lowerMessage.includes('help') || lowerMessage.includes('what can you do')) {
-    return `I can help you with:
-• 📊 Analyzing your fitness metrics (steps, calories, active minutes)
-• 🧪 Understanding your lab results and biomarkers
-• 📈 Tracking health trends over time
-• 💡 Providing personalized health insights
-• 🎯 Setting realistic health goals
-
-What specific area would you like to explore?`
-  }
-
-  // Default response
-  return `I understand you're asking about "${message}". While I'm still learning, I can help you analyze your fitness data, lab results, and health trends. Try asking about your steps, calories, lab markers, or recent progress! 🤖💙`
 }
 
 async function storeConversation(userId: string, userMessage: string, aiResponse: string) {

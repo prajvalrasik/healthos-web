@@ -1,39 +1,68 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-export async function GET() {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+export async function GET(request: NextRequest) {
   try {
-    // Create server-side Supabase client with service role for database operations
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-    
-    // Test if profiles table exists
-    const { data: profiles, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id')
-      .limit(1)
-    
-    // Test if fit_daily_metrics table exists  
-    const { data: metrics, error: metricsError } = await supabase
-      .from('fit_daily_metrics')
-      .select('id')
-      .limit(1)
+    // Test database connection and table existence
+    const tableTests = [
+      'profiles',
+      'fit_daily_metrics', 
+      'lab_markers',
+      'lab_reports',
+      'chat_conversations'
+    ]
+
+    const results: { [key: string]: any } = {}
+
+    for (const table of tableTests) {
+      try {
+        const { data, error, count } = await supabase
+          .from(table)
+          .select('*', { count: 'exact', head: true })
+          .limit(1)
+
+        results[table] = {
+          exists: !error,
+          error: error?.message || null,
+          count: count || 0
+        }
+      } catch (err) {
+        results[table] = {
+          exists: false,
+          error: err instanceof Error ? err.message : 'Unknown error',
+          count: 0
+        }
+      }
+    }
+
+    // Test environment variables
+    const envCheck = {
+      NEXT_PUBLIC_SUPABASE_URL: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      GOOGLE_GEMINI_API_KEY: !!process.env.GOOGLE_GEMINI_API_KEY
+    }
 
     return NextResponse.json({
       success: true,
-      tables: {
-        profiles: profilesError ? `Error: ${profilesError.message}` : `OK (${profiles?.length || 0} records)`,
-        fit_daily_metrics: metricsError ? `Error: ${metricsError.message}` : `OK (${metrics?.length || 0} records)`
-      }
+      tables: results,
+      environment: envCheck,
+      timestamp: new Date().toISOString()
     })
-    
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Database test failed'
-    return NextResponse.json({
-      success: false,
-      error: errorMessage
-    }, { status: 500 })
+
+  } catch (error) {
+    console.error('Database test error:', error)
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
+      },
+      { status: 500 }
+    )
   }
 } 

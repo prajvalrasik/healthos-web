@@ -48,6 +48,14 @@ async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
+    const contentType = request.headers.get('content-type')
+    
+    // Handle file upload (FormData)
+    if (contentType?.includes('multipart/form-data')) {
+      return await handleFileUpload(request)
+    }
+    
+    // Handle existing reportId processing (JSON)
     const { reportId } = await request.json()
 
     if (!reportId) {
@@ -133,7 +141,7 @@ export async function POST(request: NextRequest) {
     const { error: updateError } = await supabase
       .from('lab_reports')
       .update({ 
-        processed: true,
+        status: 'completed',
         processed_at: new Date().toISOString()
       })
       .eq('id', reportId)
@@ -155,6 +163,137 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to process lab report'
     console.error('Error processing lab report:', errorMessage)
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500 }
+    )
+  }
+}
+
+// Handle file upload (new function)
+async function handleFileUpload(request: NextRequest) {
+  try {
+    const formData = await request.formData()
+    const file = formData.get('file') as File
+    const userId = formData.get('userId') as string
+
+    if (!file || !userId) {
+      return NextResponse.json({ error: 'File and userId are required' }, { status: 400 })
+    }
+
+    console.log('📁 File upload received:', file.name, 'Size:', file.size)
+
+    // Generate unique filename
+    const fileName = `${userId}-${Date.now()}-${file.name}`
+    const filePath = `${userId}/${fileName}`
+
+    // Upload file to Supabase storage
+    const { error: uploadError } = await supabase.storage
+      .from('lab-reports')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      })
+
+    if (uploadError) {
+      console.error('Storage upload error:', uploadError)
+      return NextResponse.json({ error: 'Failed to upload file' }, { status: 500 })
+    }
+
+    // Create lab report record
+    const { data: labReport, error: dbError } = await supabase
+      .from('lab_reports')
+      .insert({
+        user_id: userId,
+        filename: file.name,
+        file_path: filePath,
+        upload_date: new Date().toISOString(),
+        status: 'processing'
+      })
+      .select()
+      .single()
+
+    if (dbError || !labReport) {
+      console.error('Database insert error:', dbError)
+      return NextResponse.json({ error: 'Failed to create lab report record' }, { status: 500 })
+    }
+
+    console.log('📋 Lab report record created:', labReport.id)
+
+    // Process the file immediately
+    const arrayBuffer = await file.arrayBuffer()
+    const extractedText = await extractTextFromPDF(arrayBuffer)
+    
+    console.log('Extracted text length:', extractedText.length)
+
+    if (!extractedText.trim()) {
+      throw new Error('No text extracted from PDF')
+    }
+
+    // Use regex extraction for immediate processing (more reliable than AI)
+    let labMarkers: Array<{marker: string; value: number; unit: string}> = []
+    
+    try {
+      // Try AI extraction first
+      labMarkers = await extractLabMarkersWithFallback(extractedText)
+      console.log('AI extraction successful:', labMarkers.length, 'markers found')
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      console.log('AI extraction failed, using regex fallback:', errorMessage)
+      // Fall back to regex extraction
+      labMarkers = extractWithRegex(extractedText)
+    }
+
+    console.log('Final extracted lab markers:', labMarkers)
+
+    // Store lab markers in database
+    if (labMarkers.length > 0) {
+      const markersToInsert = labMarkers.map(marker => ({
+        user_id: userId,
+        lab_report_id: labReport.id,
+        marker_name: marker.marker,
+        value: marker.value,
+        unit: marker.unit,
+        taken_at: new Date().toISOString().split('T')[0]
+      }))
+
+      const { error: markersError } = await supabase
+        .from('lab_markers')
+        .insert(markersToInsert)
+
+      if (markersError) {
+        console.error('Error inserting lab markers:', markersError)
+        throw markersError
+      }
+    }
+
+    // Mark report as processed
+    const { error: updateError } = await supabase
+      .from('lab_reports')
+      .update({ 
+        status: 'completed',
+        processed_at: new Date().toISOString()
+      })
+      .eq('id', labReport.id)
+
+    if (updateError) {
+      console.error('Error updating lab report:', updateError)
+      throw updateError
+    }
+
+    console.log('✅ Lab report uploaded and processed successfully')
+
+    return NextResponse.json({
+      success: true,
+      message: 'Lab report uploaded and processed successfully',
+      reportId: labReport.id,
+      markersFound: labMarkers.length,
+      markers: labMarkers
+    })
+
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to upload and process lab report'
+    console.error('Error in file upload:', errorMessage)
     return NextResponse.json(
       { error: errorMessage },
       { status: 500 }

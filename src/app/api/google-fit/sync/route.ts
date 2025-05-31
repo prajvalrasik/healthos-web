@@ -44,6 +44,10 @@ async function refreshAccessToken(refreshToken: string) {
   const data = await response.json()
   
   if (!response.ok) {
+    // Handle specific error cases
+    if (data.error === 'invalid_grant') {
+      throw new Error('REFRESH_TOKEN_EXPIRED: Your Google Fit connection has expired. Please reconnect your account.')
+    }
     throw new Error(`Failed to refresh token: ${data.error}`)
   }
 
@@ -182,16 +186,20 @@ async function parseFitData(fitData: GoogleFitResponse, userId: string, supabase
 }
 
 export async function POST(request: Request) {
+  let userId: string | undefined
+  let supabase: any
+  
   try {
     // Get user ID from request body
-    const { userId } = await request.json()
+    const requestBody = await request.json()
+    userId = requestBody.userId
     
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
     // Create server-side Supabase client with service role for database operations
-    const supabase = createClient(
+    supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
@@ -248,6 +256,32 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to sync Google Fit data'
     console.error('Fit sync error:', errorMessage)
+    
+    // Handle expired refresh token
+    if (errorMessage.includes('REFRESH_TOKEN_EXPIRED')) {
+      try {
+        // Clear the invalid refresh token if we have the necessary variables
+        if (supabase && userId) {
+          await supabase
+            .from('profiles')
+            .update({ google_refresh_token: null })
+            .eq('id', userId)
+          
+          console.log('Cleared invalid refresh token for user:', userId)
+        }
+        
+        return NextResponse.json(
+          { 
+            error: 'Google Fit connection expired. Please reconnect your account.',
+            action: 'reconnect_required'
+          },
+          { status: 401 }
+        )
+      } catch (clearError) {
+        console.error('Failed to clear invalid token:', clearError)
+      }
+    }
+    
     return NextResponse.json(
       { error: errorMessage },
       { status: 500 }
