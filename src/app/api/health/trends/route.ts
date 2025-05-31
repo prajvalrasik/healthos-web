@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { subDays, format, parseISO } from 'date-fns'
+import { subDays } from 'date-fns'
 import { calculateUnifiedHealthScore, assessMarkerStatus, categorizeMarker } from '@/lib/healthScore'
 
 const supabase = createClient(
@@ -165,7 +165,7 @@ async function generateTrendAnalysis(userId: string, days: number): Promise<Tren
     const prediction = history.length >= 3 ? {
       nextValue: Math.round((secondAvg + (secondAvg - firstAvg)) * 100) / 100,
       confidence: Math.max(0.3, Math.min(0.9, 1 - Math.abs(changePercent) / 100)),
-      recommendation: generateRecommendation(markerData.markerName, trend, changePercent)
+      recommendation: generateRecommendation(markerData.markerName, trend)
     } : undefined
 
     return {
@@ -185,7 +185,7 @@ async function generateTrendAnalysis(userId: string, days: number): Promise<Tren
   }
 }
 
-function generateRecommendation(markerName: string, trend: string, changePercent: number): string {
+function generateRecommendation(markerName: string, trend: string): string {
   const name = markerName.toLowerCase()
   
   if (trend === 'improving') {
@@ -265,7 +265,7 @@ function generateHealthInsights(
 
   // Create lab data for unified scoring
   const recentLabData = labTrends.flatMap(trend => 
-    trend.history.slice(-1).map((h: any) => ({
+    trend.history.slice(-1).map((h: LabHistoryItem) => ({
       status: h.status,
       markerName: trend.markerName,
       value: h.value,
