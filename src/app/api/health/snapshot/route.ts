@@ -214,9 +214,19 @@ function calculateWeeklyTrends(weekMetrics: Array<{
     activeMinutes: Math.round(weekMetrics.reduce((sum, m) => sum + m.active_minutes, 0) / weekMetrics.length)
   }
 
+  const stepsChange =
+    previousAvgSteps === 0
+      ? 0
+      : Math.round(((recentAvgSteps - previousAvgSteps) / previousAvgSteps) * 100)
+
+  const caloriesChange =
+    previousAvgCalories === 0
+      ? 0
+      : Math.round(((recentAvgCalories - previousAvgCalories) / previousAvgCalories) * 100)
+
   return {
-    stepsChange: Math.round(((recentAvgSteps - previousAvgSteps) / previousAvgSteps) * 100),
-    caloriesChange: Math.round(((recentAvgCalories - previousAvgCalories) / previousAvgCalories) * 100),
+    stepsChange,
+    caloriesChange,
     weeklyAverage
   }
-} 
+}
