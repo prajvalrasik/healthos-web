@@ -151,6 +151,17 @@ export async function POST(request: NextRequest) {
       throw updateError
     }
 
+    // Insert timeline event for lab upload
+    await supabase.from('timeline_events').insert({
+      user_id: labReport.user_id,
+      event_type: 'lab_upload',
+      event_date: new Date().toISOString(),
+      title: 'Lab Report Uploaded',
+      description: `Lab report processed with ${labMarkers.length} markers extracted.`,
+      data: { reportId, markerCount: labMarkers.length },
+      icon: '🧪'
+    })
+
     console.log('Lab report processed successfully')
 
     return NextResponse.json({
@@ -280,6 +291,17 @@ async function handleFileUpload(request: NextRequest) {
       console.error('Error updating lab report:', updateError)
       throw updateError
     }
+
+    // Insert timeline event for lab upload
+    await supabase.from('timeline_events').insert({
+      user_id: userId,
+      event_type: 'lab_upload',
+      event_date: new Date().toISOString(),
+      title: 'Lab Report Uploaded',
+      description: `Lab report processed with ${labMarkers.length} markers extracted.`,
+      data: { reportId: labReport.id, markerCount: labMarkers.length },
+      icon: '🧪'
+    })
 
     console.log('✅ Lab report uploaded and processed successfully')
 

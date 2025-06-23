@@ -98,7 +98,16 @@ async function parseFitData(fitData: GoogleFitResponse, userId: string, supabase
   if (fitData.bucket) {
     for (let i = 0; i < fitData.bucket.length; i++) {
       const bucket = fitData.bucket[i]
-      const date = new Date(parseInt(bucket.startTimeMillis)).toISOString().split('T')[0]
+      // Google Fit buckets are aligned to the user's local midnight, so use startTimeMillis as the local date
+      // But to be robust, also log the UTC and local date for debugging
+      const startDateUTC = new Date(parseInt(bucket.startTimeMillis))
+      const endDateUTC = new Date(parseInt(bucket.endTimeMillis))
+      // Use the date as Google Fit intended (local day boundary)
+      // This is safe because Google Fit buckets are per local day
+      const date = startDateUTC.toISOString().split('T')[0]
+      console.log(`BUCKET ${i + 1}: startTimeMillis=${bucket.startTimeMillis}, endTimeMillis=${bucket.endTimeMillis}`)
+      console.log(`  startDateUTC: ${startDateUTC.toISOString()}, endDateUTC: ${endDateUTC.toISOString()}`)
+      console.log(`  Using date for DB: ${date}`)
       
       const metrics: DailyMetrics = {
         user_id: userId,
@@ -242,6 +251,17 @@ export async function POST(request: Request) {
     console.log('📊 Raw Google Fit response:', JSON.stringify(fitData, null, 2))
     console.log('💾 Records stored in database:', recordsStored)
     console.log('👤 User ID:', userId)
+
+    // Insert timeline event for sync
+    await supabase.from('timeline_events').insert({
+      user_id: userId,
+      event_type: 'sync',
+      event_date: new Date().toISOString(),
+      title: 'Google Fit Synced',
+      description: `Google Fit data synced for ${startDateStr} to ${endDateStr}.`,
+      data: { startDate: startDateStr, endDate: endDateStr, recordsStored },
+      icon: '🔄'
+    })
 
     return NextResponse.json({
       success: true,

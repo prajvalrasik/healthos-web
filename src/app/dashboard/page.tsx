@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import AppLayout from '@/components/AppLayout'
 import type { User } from '@supabase/supabase-js'
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer } from 'recharts'
+import GoalsCard from './components/GoalsCard'
 
 interface HealthMetrics {
   healthScore: number
@@ -617,6 +618,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      {user && <GoalsCard userId={user.id} />}
     </AppLayout>
   )
 } 
